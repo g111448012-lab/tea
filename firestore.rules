@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Products: Anyone can read, only admin can write
+    // For simplicity in this demo, let's assume the first user or specific UID is admin
+    // In a real app, you'd have an 'admins' collection
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "g111448012@grad.ntue.edu.tw" ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isSignedIn(); // Allow initial seeding if signed in
+      allow update, delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow create: if true;
+      allow get: if true; // Allow checking success status
+      allow list, update: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.customerUid);
+    }
+    
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && request.auth.uid == adminId;
+      allow write: if false; // Managed via console or special script
+    }
+  }
+}
